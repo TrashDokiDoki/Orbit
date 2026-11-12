@@ -71,6 +71,7 @@ function showSection({ section, add }) {
   });
   document.querySelectorAll('[data-page]').forEach(page => { page.hidden = page.dataset.page !== section; });
   document.querySelector('.settings-scroll').scrollTop = 0;
+  if (section === 'updates' && !$('check-update').disabled) run(api.updateStatus(), renderUpdate);
   if (add) $('add').click();
 }
 
@@ -89,6 +90,30 @@ function updatePreview() {
   symbol.hidden = character === 'pug'||character==='pixel';
   symbol.textContent = ({ sphere: '●', eyes: '▮ ▮', spark: '✦' })[character] || '';
 }
+
+function renderUpdate(result) {
+  $('update-current').textContent = result.current;
+  $('update-release').hidden = !result.available;
+  $('update-status').textContent = result.available ? 'Доступна версия ' + result.latest :
+    result.latest === undefined ? 'Проверка через GitHub' :
+    result.latest === null ? 'Опубликованных релизов нет' : 'Установлена актуальная версия';
+}
+
+$('check-update').onclick = async () => {
+  const check = $('check-update');
+  check.disabled = true;
+  $('update-status').textContent = 'Проверяем…';
+  try {
+    const result = await api.checkUpdate();
+    if (result.error) throw Error(result.error);
+    renderUpdate(result);
+  } catch {
+    $('update-status').textContent = 'Не удалось проверить обновления. Повторите позже.';
+  } finally {
+    check.disabled = false;
+  }
+};
+$('open-update').onclick = () => run(api.openUpdate());
 
 document.querySelectorAll('[data-section]').forEach(button => {
   button.onclick = () => showSection({ section: button.dataset.section });

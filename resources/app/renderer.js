@@ -1,5 +1,6 @@
-const $=id=>document.getElementById(id),api=window.orbit;let settings,state,systemLabel='',displays=[],open=false,tab='home',system={},nativeError='',activeNote=null,noteTimeout,hoverTimeout,mediaRecorder,mediaStream,recordChunks=[],recordMime='',recordStart=0;
-const titles={home:'Главная',clipboard:'Буфер обмена',shelf:'Полка',notes:'Заметки',tools:'Инструменты',weather:'Погода',search:'Поиск',controls:'Управление',settings:'Настройки'};
+const $=id=>document.getElementById(id),api=window.orbit;let networkTimer, networkStatus, networkBusy = false;
+let settings,state,systemLabel='',displays=[],open=false,tab='home',system={},nativeError='',activeNote=null,noteTimeout,hoverTimeout,mediaRecorder,mediaStream,recordChunks=[],recordMime='',recordStart=0;
+const titles={home:'Главная',clipboard:'Буфер обмена',shelf:'Полка',notes:'Заметки',tools:'Инструменты',weather:'Погода',search:'Поиск',controls:'Управление',network:'Сетевые инструменты',settings:'Настройки'};
 function text(tag,content,className){const n=document.createElement(tag);n.textContent=content;if(className)n.className=className;return n}function button(label,fn,className){const b=text('button',label,className);b.type='button';b.onclick=fn;return b}function message(t){$('message').textContent=t||''}async function run(p,success){try{const r=await p;if(r?.error)throw Error(r.error);if(success)success(r);return r}catch(e){message(e.message);return null}}
 function expand(value) {
   clearTimeout(hoverTimeout);
@@ -66,7 +67,15 @@ api.onExpanded(renderExpanded);api.onTab(showTab);api.onError(message);api.onNat
   renderSystem();
 });api.onState(s=>{state=s;renderTimer();renderReminders()});api.onAlarm(queueAlarm);api.onRecordToggle(()=>toggleRecord());api.onRecording(v=>{if(!v&&mediaRecorder?.state==='inactive')recordStart=0});
 function showTab(name){if(name==='settings'){run(api.openSettings());return}if(!titles[name])return;if(tab==='notes')saveNotes();tab=name;syncPanelWork();document.querySelectorAll('[data-page]').forEach(el=>el.hidden=el.dataset.page!==name);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));$('title').textContent=titles[name];$('title').hidden=Boolean(document.querySelector('#tabs .active'));$('content').scrollTop=0;message('');if(name==='clipboard')renderClips();if(name==='shelf')renderShelf();if(name==='notes')renderNotes();if(name==='tools')renderColors();if(name==='search'){$('command').focus();renderSearch()}if(name==='controls'){$('native-status').textContent=nativeError;refreshControls();refreshHapp()}if(name==='home')loadLyrics()}
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));document.querySelectorAll('[data-goto]').forEach(b=>b.onclick=()=>showTab(b.dataset.goto));$('settings-button').onclick=()=>run(api.openSettings());
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));document.querySelectorAll('[data-goto]').forEach(b=>b.onclick=()=>showTab(b.dataset.goto));const settingsButton = $('settings-button');
+function renderUpdateBadge(result) {
+  settingsButton.classList.toggle('update-available', Boolean(result.available));
+  settingsButton.title = result.available ? 'Доступен Orbit ' + result.latest : 'Настройки';
+  settingsButton.setAttribute('aria-label', settingsButton.title);
+}
+settingsButton.onclick = () => run(api.openSettings(settingsButton.classList.contains('update-available') ? 'updates' : 'general'));
+api.onUpdateResult(renderUpdateBadge);
+run(api.updateStatus(), renderUpdateBadge);
 $('pill').addEventListener('mouseenter',()=>{if(settings?.hover&&!settings.clickThrough&&!open&&!miniOpen&&!(system.restricted&&settings.ruleMode==='manual')&&!(system.media?.playing&&settings.musicMode==='mini'))hoverTimeout=setTimeout(()=>expand(true),settings.hoverDelay)});$('pill').addEventListener('mouseleave',()=>clearTimeout(hoverTimeout));$('pill').addEventListener('wheel',e=>{e.preventDefault();run(api.native('volume',{command:e.deltaY<0?'up':'down'}),()=>changeAudio('status'))},{passive:false});document.addEventListener('pointermove',e=>{const x=Math.max(-2,Math.min(2,(e.clientX-innerWidth/2)/60)),y=Math.max(-2,Math.min(2,e.clientY/60-1));$('mascot').style.setProperty('--eye-x',x+'px');$('mascot').style.setProperty('--eye-y',y+'px')});
 function applyAppearance(){document.documentElement.style.setProperty('--user-accent',settings.accent);document.body.classList.toggle('light',settings.theme==='light'||settings.theme==='system'&&matchMedia('(prefers-color-scheme: light)').matches);document.body.dataset.position = settings.position;document.body.dataset.shape = settings.shape;document.body.dataset.musicMode=settings.musicMode;applyModules();updateMascot();if(settings.musicMode!=='mini'&&miniOpen)setCompactPlayer(false);$('shortcut-hint').textContent=settings.shortcut||'Control+Alt+I';applyTrackAccent();renderCompactMedia();syncPanelWork();if(lastForecast)checkRain(lastForecast)}
 async function displayFileIcon(slot, file) {
@@ -172,6 +181,14 @@ let controlsWork = false;
 function syncPanelWork() {
   const visible = document.visibilityState === 'visible';
   const controls = visible && open && tab === 'controls';
+  const network = visible && open && tab === 'network';
+  if (network && networkTimer === undefined) {
+    networkTimer = setInterval(refreshNetworkTools, 2500);
+    void refreshNetworkTools();
+  } else if (!network && networkTimer !== undefined) {
+    clearInterval(networkTimer);
+    networkTimer = undefined;
+  }
   if (controls !== controlsWork) {
     controlsWork = controls;
     api.controlsView(controls);
@@ -801,6 +818,47 @@ $('happ-vpn').oncontextmenu = async event => {
   });
 };
 setInterval(() => { if (open) refreshHapp(); }, 3500);
+
+function renderNetworkTools(status) {
+  networkStatus = status;
+  const zapret = status.zapret;
+  $('zapret-state').textContent = zapret === 'Running' ? 'Включён' : zapret === 'Stopped' ? 'Выключен' :
+    zapret === null ? 'Служба не установлена' : zapret ? 'Переходное состояние' : 'Статус недоступен';
+  $('zapret-toggle').textContent = zapret === 'Running' ? 'Выключить' : 'Включить';
+  $('zapret-toggle').disabled = networkBusy || !['Running', 'Stopped'].includes(zapret);
+  $('tg-state').textContent = status.proxyConfigured === false ? 'Выберите файл приложения' :
+    !status.proxyConfigured ? 'Статус недоступен' : status.proxyRunning ? 'Запущен' : 'Остановлен';
+  $('tg-toggle').textContent = status.proxyRunning ? 'Выключить' : 'Включить';
+  $('tg-toggle').disabled = networkBusy || !status.proxyConfigured;
+  $('tg-pick').disabled = networkBusy;
+}
+async function refreshNetworkTools() {
+  if (networkBusy) return;
+  const result = await api.networkToolsStatus().catch(() => ({}));
+  if (!networkBusy) renderNetworkTools(result?.error ? {} : result);
+}
+async function changeNetworkTool(operation) {
+  if (networkBusy) return;
+  networkBusy = true;
+  renderNetworkTools(networkStatus || {});
+  message('');
+  try {
+    const result = await operation();
+    if (result.error) throw Error(result.error);
+    renderNetworkTools(result);
+  } catch (error) {
+    message(error.message);
+  } finally {
+    networkBusy = false;
+    renderNetworkTools(networkStatus || {});
+    void refreshNetworkTools();
+  }
+}
+$('zapret-toggle').onclick = () => changeNetworkTool(() => api.networkToolsSet('zapret', networkStatus?.zapret !== 'Running'));
+$('tg-toggle').onclick = () => changeNetworkTool(() => api.networkToolsSet('tg', !networkStatus?.proxyRunning));
+$('tg-pick').onclick = () => changeNetworkTool(() => api.networkToolsPickProxy());
+$('zapret-guide').onclick = () => run(api.networkToolsLink('zapret'));
+$('tg-guide').onclick = () => run(api.networkToolsLink('tg'));
 
 let controlsState;
 let controlsPending = false;

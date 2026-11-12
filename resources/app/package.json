@@ -1,6 +1,6 @@
 {
   "name": "orbit-island",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Customizable Windows desktop island: launcher, clipboard, shelf, notes, timers and capture tools",
   "main": "main.js",
   "author": "Orbit",

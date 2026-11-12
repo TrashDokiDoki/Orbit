@@ -15,6 +15,7 @@
       <button type="button" data-section="appearance"><span aria-hidden="true">◐</span>Внешний вид</button>
       <button type="button" data-section="modules"><span aria-hidden="true">⊞</span>Модули</button><button type="button" data-section="keys"><span aria-hidden="true">⌨</span>Клавиши</button>
       <button type="button" data-section="apps"><span aria-hidden="true">⊞</span>Лаунчер</button>
+      <button type="button" data-section="updates"><span aria-hidden="true">⟳</span>Обновления</button>
       <button type="button" data-section="data"><span aria-hidden="true">▱</span>Данные</button>
     </nav>
     <button type="button" id="quit">⏻ Выйти из Orbit</button>
@@ -70,6 +71,14 @@
         <section data-page="apps" hidden>
           <header class="page-heading"><h1>Лаунчер</h1><button type="button" id="add">＋ Добавить</button></header>
           <div id="entries"></div>
+        </section>
+        <section data-page="updates" hidden>
+          <h1>Обновления</h1>
+          <div class="settings-group">
+            <div><span>Установленная версия</span><strong id="update-current">—</strong></div>
+            <div><span id="update-status" role="status">Проверка через GitHub</span><button type="button" id="check-update">Проверить</button></div>
+            <div id="update-release" hidden><span>Универсальный установщик на GitHub</span><button type="button" id="open-update">Открыть релиз</button></div>
+          </div>
         </section>
         <section data-page="data" hidden>
           <h1>Данные</h1>

@@ -1,5 +1,5 @@
 const {app,BrowserWindow,ipcMain,screen,globalShortcut,Tray,Menu,nativeImage,shell,dialog,clipboard,desktopCapturer,Notification,session,nativeTheme}=require('electron');
-const fs=require('fs');const path=require('path');const crypto=require('crypto');const {spawn}=require('child_process');const WindowsBridge=require('./native');
+const fs=require('fs');const path=require('path');const crypto=require('crypto');const {spawn,execFile}=require('child_process');const WindowsBridge=require('./native');
 let win,tray,bridge,expanded=false,settings,state,editor,polling=false,recording=false;let timers=[];let lastClip='';let autoHidden=false;
 let collapseTimer;
 let capturing = false;
@@ -241,6 +241,141 @@ handler('compact-mini', value => {
 });
 const windowsBuild = process.platform === 'win32' ? Number(process.getSystemVersion().split('.')[2]) : 0;
 const systemLabel = !windowsBuild ? 'Windows' : windowsBuild >= 22000 ? 'Windows 11' : 'Windows 10';
+const releaseBase = 'https://github.com/TrashDokiDoki/Orbit/releases/tag/v';
+let updateCheck;
+let updateInfo;
+let updateNotification;
+let startupUpdateTimer;
+
+function versionParts(version) {
+  if (typeof version !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(version)) return null;
+  const parts = version.replace(/^v/, '').split('.').map(Number);
+  return parts.every(Number.isSafeInteger) ? parts : null;
+}
+
+async function fetchLatestRelease() {
+  const response = await require('electron').net.fetch('https://api.github.com/repos/TrashDokiDoki/Orbit/releases/latest', {
+    headers: { Accept: 'application/vnd.github+json' },
+    redirect: 'error',
+    signal: AbortSignal.timeout(10000)
+  });
+  const current = app.getVersion();
+  if (response.status === 404) return { current, latest: null, available: false };
+  if (!response.ok) throw Error('GitHub недоступен (HTTP ' + response.status + ')');
+  const release = await response.json();
+  const installed = versionParts(current);
+  const latest = versionParts(release.tag_name);
+  if (!latest || !installed || release.draft || release.prerelease) throw Error('Не удалось определить версию релиза');
+  const difference = latest.findIndex((value, index) => value !== installed[index]);
+  return { current, latest: latest.join('.'), available: difference !== -1 && latest[difference] > installed[difference] };
+}
+
+function checkForUpdates() {
+  if (!updateCheck) {
+    updateCheck = fetchLatestRelease().then(result => {
+      updateInfo = result;
+      send('update-result', result);
+      return result;
+    }).finally(() => { updateCheck = undefined; });
+  }
+  return updateCheck;
+}
+
+async function notifyAboutUpdate() {
+  try {
+    const result = await checkForUpdates();
+    if (!result.available || !Notification.isSupported() || read('update-notice.json', {}).version === result.latest) return;
+    updateNotification = new Notification({
+      title: 'Доступен Orbit ' + result.latest,
+      body: 'Нажмите, чтобы открыть раздел «Обновления».',
+      icon: path.join(__dirname, 'icon.png')
+    });
+    updateNotification.on('click', () => openSettings('updates'));
+    updateNotification.on('show', () => {
+      try { write('update-notice.json', { version: result.latest }); } catch {}
+    });
+    updateNotification.show();
+  } catch {
+    // Automatic checks stay quiet when GitHub is unavailable.
+  }
+}
+
+handler('update-status', () => updateInfo || { current: app.getVersion() });
+handler('update-check', checkForUpdates);
+handler('update-open', () => {
+  if (!updateInfo?.available) throw Error('Обновление не найдено');
+  return shell.openExternal(releaseBase + updateInfo.latest);
+});
+const networkToolLinks = new Map([
+  ['zapret', 'https://github.com/Flowseal/zapret-discord-youtube'],
+  ['tg', 'https://github.com/Flowseal/tg-ws-proxy/releases/latest']
+]);
+const proxyName = /^TgWsProxy_windows(?:_arm64)?\.exe$/i;
+let networkChange;
+function proxyExecutable() {
+  const file = read('network-tools.json', {}).proxy;
+  return typeof file === 'string' && /^[a-z]:[\\/]/i.test(file) &&
+    proxyName.test(path.basename(file)) && fs.statSync(file, { throwIfNoEntry: false })?.isFile() ? path.normalize(file) : null;
+}
+async function networkToolStatus() {
+  const proxy = proxyExecutable();
+  const status = await bridge.call('network-tool-status', { proxy });
+  return { ...status, proxyConfigured: Boolean(proxy) };
+}
+function changeZapret(enable) {
+  const verb = enable ? 'start' : 'stop';
+  const command = "$p=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\sc.exe') " +
+    "-ArgumentList '" + verb + " zapret' -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode";
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoLogo','-NoProfile','-NonInteractive','-Command',command],
+      { windowsHide: true, timeout: 60000 }, error => error ?
+        reject(Error('Не удалось переключить службу Zapret. Проверьте её настройки и подтвердите запрос Windows.')) : resolve());
+  });
+}
+handler('network-tools-status', networkToolStatus);
+handler('network-tools-link', key => {
+  const url = networkToolLinks.get(key);
+  if (!url) throw Error('Неизвестный инструмент');
+  return shell.openExternal(url);
+});
+handler('network-tools-pick-proxy', async () => {
+  if (networkChange) throw Error('Дождитесь завершения переключения');
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'Выберите TG WS Proxy', properties: ['openFile'], filters: [{ name: 'Приложение Windows', extensions: ['exe'] }]
+  });
+  if (!canceled) {
+    const [file] = filePaths;
+    if (!/^[a-z]:[\\/]/i.test(file) || !proxyName.test(path.basename(file))) {
+      throw Error('Выберите TgWsProxy_windows.exe или TgWsProxy_windows_arm64.exe');
+    }
+    write('network-tools.json', { proxy: file });
+  }
+  return networkToolStatus();
+});
+handler('network-tools-set', async (key, enable) => {
+  if (!networkToolLinks.has(key) || typeof enable !== 'boolean') throw Error('Неизвестная команда');
+  if (networkChange) throw Error('Дождитесь завершения переключения');
+  networkChange = true;
+  try {
+    const before = await networkToolStatus();
+    if (key === 'zapret') {
+      if (!before.zapret) throw Error('Сначала установите службу Zapret через service.bat');
+      if (before.zapret === (enable ? 'Stopped' : 'Running')) await changeZapret(enable);
+    } else {
+      const file = proxyExecutable();
+      if (!file) throw Error('Сначала выберите файл TG WS Proxy');
+      if (enable && !before.proxyRunning) {
+        const issue = await shell.openPath(file);
+        if (issue) throw Error(issue);
+      } else if (!enable && before.proxyRunning) {
+        await bridge.call('network-tool-stop-proxy', { proxy: file });
+      }
+    }
+    return await networkToolStatus();
+  } finally {
+    networkChange = false;
+  }
+});
 handler('get',()=>({settings,state,displays:screen.getAllDisplays().map((d,i)=>({index:i,label:d.label||'Монитор '+(i+1)})),version:app.getVersion(),platform:process.platform,systemLabel,gpuAccelerationActive:app.isHardwareAccelerationEnabled(),hotkeys}));
 handler('expand',v=>expand(v));handler('quit',()=>app.quit());
 handler('lyrics', async track => {
@@ -434,4 +569,4 @@ handler('record-save',async(payload,mime)=>{recording=false;const ext=mime.inclu
 handler('weather',async(city)=>{const get=async url=>{const res=await require('electron').net.fetch(url,{signal:AbortSignal.timeout(10000)});if(!res.ok)throw Error('Погода недоступна: HTTP '+res.status);return res.json()};const geo=await get('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(String(city).slice(0,80))+'&count=1&language=ru&format=json');const loc=geo.results?.[0];if(!loc)throw Error('Город не найден');const forecast=await get(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&wind_speed_unit=ms&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,is_day&hourly=temperature_2m,weather_code,is_day,precipitation_probability,precipitation,dew_point_2m,surface_pressure,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum,uv_index_max&timezone=auto&forecast_days=7`);return {location:loc,forecast}});
 handler('data-export',async()=>{const r=await dialog.showSaveDialog(settingsWindow||win,{defaultPath:'Orbit-backup.json',filters:[{name:'JSON',extensions:['json']}]});if(!r.canceled)fs.writeFileSync(r.filePath,JSON.stringify({settings,state},null,2));return !r.canceled});
 handler('data-folder',()=>shell.openPath(app.getPath('userData')));
-if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(create);app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}
+if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(() => {create();startupUpdateTimer=setTimeout(notifyAboutUpdate,10000);timers.push(setInterval(notifyAboutUpdate,6*60*60*1000));});app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(startupUpdateTimer);clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}

@@ -138,6 +138,29 @@ while($null -ne ($line=[Console]::ReadLine())) {
 try {
 $r=$line|ConvertFrom-Json;$v=$null
 switch($r.action){
+'network-tool-status' {
+  $service = Get-Service -Name 'zapret' -ErrorAction SilentlyContinue
+  $proxy = [string]$r.proxy
+  $running = $false
+  if ($proxy) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($proxy)
+    $running = @(Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $proxy }).Count -gt 0
+  }
+  $v = @{ zapret = if ($service) { $service.Status.ToString() } else { $null }; proxyRunning = $running }
+}
+'network-tool-stop-proxy' {
+  $proxy = [string]$r.proxy
+  $name = [IO.Path]::GetFileNameWithoutExtension($proxy)
+  if ($name -notmatch '^TgWsProxy_windows(_arm64)?$') { throw 'Неверное имя TG WS Proxy' }
+  $processes = Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $proxy }
+  foreach ($process in ($processes | Sort-Object StartTime)) {
+    if (!$process.HasExited) {
+      try { Stop-Process -InputObject $process -ErrorAction Stop }
+      catch { if (!$process.HasExited) { throw } }
+    }
+  }
+  $v = $true
+}
 'file-ico' {
   if(-not ('System.Drawing.Icon' -as [type])){Add-Type -AssemblyName System.Drawing}
   $icon=[System.Drawing.Icon]::new([string]$r.path,48,48)

@@ -700,3 +700,14 @@ body.light .weather-tile .weather-tile-rain { color: #1e5e9a; }
 #panel:has([data-page="weather"]:not([hidden])) #message:empty { display: none; }
 
 .weather-sun-times { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; }
+
+#settings-button.update-available { position: relative; }
+#settings-button.update-available::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.network-tools { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.network-tool { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; background: var(--surface); border-radius: 20px; }
+.network-tool h2, .network-tool p { margin: 0; }
+.network-tool p, .network-tool small { color: var(--muted); }
+.network-tool strong { font-size: 15px; }
+.network-tool-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.network-tool-actions button { background: var(--input); }
