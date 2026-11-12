@@ -1,0 +1,78 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:"><title>Orbit</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="mascot.css"></head><body><main id="island"><button id="pill" aria-label="Раскрыть панель" aria-expanded="false" aria-controls="panel" aria-describedby="pill-weather"><img id="pill-cover" alt="" hidden><span id="pill-weather" title="Погода"><span id="weather-icon" aria-hidden="true">☁</span><span id="weather-degree">—°</span></span><span id="pill-status" hidden></span><span id="clock"></span><span id="pill-media" hidden><span id="pill-media-text"></span><i id="pill-progress"></i></span><span id="equalizer" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></span><span id="mascot" class="orb pug" aria-hidden="true"></span></button><div id="compact-player" hidden aria-label="Мини-плеер"><button data-media="previous" aria-label="Предыдущий трек">‹</button><button id="mini-play" data-media="play" aria-label="Пауза или воспроизведение">Ⅱ</button><button data-media="next" aria-label="Следующий трек">›</button><button id="mini-open" aria-label="Открыть Orbit">↗</button></div><span id="layout-indicator" role="status" hidden></span><div id="panel-clip"><section id="panel" inert><header id="panel-navigation"><nav id="tabs" aria-label="Разделы Orbit"><button data-tab="home" class="active" title="Главная" aria-label="Главная"><span class="tab-icon" aria-hidden="true">⌂</span><span class="tab-label">Главная</span></button><button data-tab="clipboard" title="Буфер" aria-label="Буфер"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">Буфер</span></button><button data-tab="shelf" title="Полка" aria-label="Полка"><span class="tab-icon" aria-hidden="true">▱</span><span class="tab-label">Полка</span></button><button data-tab="notes" title="Заметки" aria-label="Заметки"><span class="tab-icon" aria-hidden="true">▧</span><span class="tab-label">Заметки</span></button><button data-tab="tools" title="Инструменты" aria-label="Инструменты"><span class="tab-icon" aria-hidden="true">☷</span><span class="tab-label">Инструменты</span></button><button data-tab="weather" title="Погода" aria-label="Погода"><span class="tab-icon" aria-hidden="true">☀</span><span class="tab-label">Погода</span></button><button data-tab="controls" title="Управление" aria-label="Управление"><span class="tab-icon" aria-hidden="true">☷</span><span class="tab-label">Управление</span></button></nav><button id="happ-vpn" type="button" class="happ-vpn" aria-label="VPN Happ"><span class="vpn-shield" aria-hidden="true"></span><span id="happ-label">VPN</span></button><button id="collapse-panel" class="icon" title="Свернуть панель" aria-label="Свернуть панель">⌃</button><button id="settings-button" class="icon" title="Настройки" aria-label="Настройки">⚙</button></header><h1 id="title" hidden>Главная</h1><div id="content">
+<section data-page="home"><div class="home-dashboard"><section class="media-card" data-module="player" aria-label="Плеер"><select id="media-source" aria-label="Источник музыки" hidden><option value="">Авто</option></select>
+  <div class="player-main">
+    <div class="player-art">
+      <div class="media-symbol"><span id="cover-placeholder" aria-hidden="true">♫</span><img id="track-cover" alt="" hidden></div>
+    </div>
+    <div class="track"><strong id="track">Музыка рядом</strong><small id="artist">Включи Spotify или другой плеер</small></div>
+    <div class="progress" aria-hidden="true"><i id="track-progress"></i></div>
+    <div class="player-transport">
+      <span id="track-elapsed" class="player-time">0:00</span>
+      <div class="media-buttons">
+        <button data-media="previous" class="player-skip previous" title="Предыдущий трек" aria-label="Предыдущий трек"><i></i></button>
+        <button data-media="play" id="play" title="Воспроизвести" aria-label="Воспроизвести"><i></i></button>
+        <button data-media="next" class="player-skip" title="Следующий трек" aria-label="Следующий трек"><i></i></button>
+      </div>
+      <span id="track-duration" class="player-time">—:—</span>
+    </div>
+  </div>
+  <div class="player-lyrics">
+    <div class="lyrics-controls"><button id="lyrics-toggle" title="Поиск по названию и исполнителю в LRCLIB" aria-expanded="false" aria-controls="lyrics" hidden>Текст песни</button></div>
+    <div id="lyrics" class="lyrics" hidden tabindex="0" aria-label="Текст песни"></div>
+    <span class="lyrics-credit" aria-hidden="true">LRCLIB</span>
+  </div>
+</section>
+<div class="audio-strip" data-module="audio" aria-label="Звук">
+  <button id="audio-mute" title="Выключить звук" aria-label="Выключить звук" aria-pressed="false" disabled><span class="speaker-icon" aria-hidden="true"></span></button>
+  <input id="audio-level" type="range" min="0" max="100" value="0" aria-label="Громкость Windows" disabled>
+  <output id="audio-value" for="audio-level">—</output>
+  <button id="eq-open" title="Эквалайзер" aria-label="Эквалайзер" hidden><span class="eq-icon" aria-hidden="true">☷</span></button>
+  <select id="audio-device" aria-label="Устройство вывода звука" disabled><option>Загрузка…</option></select>
+</div>
+<div class="dashboard-tools" aria-label="Быстрые инструменты">
+  <button data-module="edit" data-capture="edit"><i aria-hidden="true">▧</i><span>Область</span></button>
+  <button data-module="full" data-capture="full"><i aria-hidden="true">▣</i><span>Весь экран</span></button>
+  <button data-module="ocr" data-capture="ocr"><i aria-hidden="true">≡</i><span>Текст с экрана</span></button>
+  <button data-module="qr" data-capture="qr"><i aria-hidden="true">▦</i><span>QR-код</span></button>
+  <button data-module="color" data-capture="color"><i aria-hidden="true">◉</i><span>Пипетка</span></button>
+  <button id="quick-text" data-module="text"><i aria-hidden="true">◇</i><span>Чистый текст</span></button>
+  <button id="quick-record" data-module="record"><i aria-hidden="true">◫</i><span>Запись экрана</span></button>
+  <button data-goto="search" data-module="command"><i aria-hidden="true">⌕</i><span>Команда</span></button>
+</div>
+<div class="launcher-strip" data-module="apps" aria-label="Быстрый запуск"><div id="apps"></div><button id="quick-add" title="Добавить приложение" aria-label="Добавить приложение">＋</button></div>
+</div><details class="home-timer"><summary>Таймер</summary><div class="timer-card"><div><strong id="timer-value">Таймер</strong></div><div id="timer-presets"><button data-minutes="5">5 м</button><button data-minutes="15">15 м</button><button data-minutes="25">25 м</button></div><div id="timer-active" hidden><button id="timer-pause">Ⅱ</button><button id="timer-reset" aria-label="Начать заново">⟳</button><button id="timer-stop">×</button></div></div><div class="inline"><input id="timer-minutes" type="number" min="0.1" max="1440" step="0.1" placeholder="Свои минуты"><button id="timer-start">Запустить</button></div><div class="system-status" id="system-status">Windows 11 · локальные данные</div></details></section>
+<section data-page="clipboard" hidden><div class="inline"><input id="clip-search" placeholder="Поиск в истории…"><button id="clip-clear">Очистить</button></div><div id="clip-notice" class="empty">История выключена. Включи её в настройках, чтобы сохранять текст и изображения локально.</div><div id="clips" class="stack"></div></section>
+<section data-page="shelf" hidden><div id="drop-zone" class="drop-zone"><b>Место для твоих файлов</b><p>Перетащи сюда файлы. Они останутся на своём месте.</p><button id="shelf-add" class="primary">Выбрать файлы</button></div><div id="shelf" class="stack"></div><p class="hint">Тяни файл за значок ↗ в другое приложение. Удаление с полки не удаляет сам файл.</p></section>
+<section data-page="notes" hidden><div class="inline"><select id="note-select" aria-label="Заметка"></select><button id="note-add">＋</button><button id="note-delete">Удалить</button></div><div class="inline"><input id="note-name" placeholder="Название"><input id="note-folder" placeholder="Папка"></div><textarea id="note-text" class="note-editor" placeholder="Идеи, планы, списки… Поддерживаются обычный текст и Markdown."></textarea><small class="muted" id="note-status">Сохраняется автоматически · обычный текст / Markdown</small><div class="section-label">НАПОМИНАНИЯ</div><div class="inline"><input id="reminder-text" placeholder="О чём напомнить?"></div><div class="inline"><input id="reminder-at" type="datetime-local"><select id="reminder-repeat"><option value="once">Один раз</option><option value="daily">Каждый день</option></select><button id="reminder-add">＋</button></div><div id="reminders" class="stack"></div><p class="hint">Таймер и напоминания работают, пока запущен Orbit. Пропущенное напоминание появится при следующем запуске.</p></section>
+<section data-page="tools" hidden><div class="tool-grid"><button data-capture="edit">▣<b>Скриншот</b><small>Область, разметка, PNG</small></button><button data-capture="ocr">T<b>Текст с экрана</b><small>Распознавание Windows</small></button><button data-capture="qr">▦<b>QR-код</b><small>Прочитать с экрана</small></button><button data-capture="color">◉<b>Пипетка</b><small>Цвет в HEX</small></button><button id="record-button">●<b id="record-label">Запись экрана</b><small>Выбранный монитор</small></button><button id="dictation">♩<b>Голос в текст</b><small>Ввод Windows · Win+H</small></button></div><label class="check"><input id="record-audio" type="checkbox" checked> Записывать системный звук</label><p class="hint" id="record-status">Сохранение в MP4, если кодек доступен; иначе WebM.</p><div class="section-label">ТЕКСТОВЫЕ ИНСТРУМЕНТЫ</div><textarea id="text-input" placeholder="Вставь текст…"></textarea><div class="text-actions"><button data-text="upper">АБВ</button><button data-text="lower">абв</button><button data-text="layout">Раскладка</button><button data-text="translit">Транслит</button><button data-text="json">JSON</button><button data-text="encode64">→ Base64</button><button data-text="decode64">← Base64</button><button data-text="url">→ URL</button><button data-text="unurl">← URL</button><button id="text-copy">Копировать</button></div><div class="section-label">НЕДАВНИЕ ЦВЕТА</div><div id="colors" class="colors"></div></section>
+<section data-page="weather" hidden><form id="weather-form" class="inline weather-search"><input id="weather-city" placeholder="Город, например Казань" required><button class="primary">Найти</button></form><div id="weather-result" class="empty">Загружаем прогноз…</div></section>
+<section data-page="search" hidden><input id="command" class="command" placeholder="Приложение, 12 * 8 или таймер 10 мин…" autocomplete="off"><div id="search-results" class="stack"></div><p class="hint">Поиск по твоим ярлыкам · вычисления · «таймер 10 мин» · «напомни через 20 мин позвонить» · поиск в интернете. Enter выполняет первое действие.</p></section>
+<section data-page="controls" hidden aria-label="Управление">
+  <div class="control-status-grid">
+    <button id="control-network" class="control-card"><span class="control-glyph" aria-hidden="true">▤</span><strong id="control-network-name">Ethernet</strong><small id="control-network-status">Проверяем…</small></button>
+    <button id="control-bluetooth" class="control-card" data-system="bluetooth"><span class="control-glyph" aria-hidden="true">ᛒ</span><strong>Bluetooth</strong><small id="control-bluetooth-status">Проверяем…</small></button>
+    <button id="control-theme" class="control-card"><span class="control-glyph" aria-hidden="true">◐</span><strong>Тёмная тема</strong><small id="control-theme-status">Проверяем…</small></button>
+    <button id="control-vpn" class="control-card"><span class="control-glyph" aria-hidden="true"><i class="vpn-shield"></i></span><strong>VPN</strong><small id="control-vpn-status">Happ</small></button>
+  </div>
+  <div class="control-power-grid">
+    <button data-power="lock"><span class="lock-glyph" aria-hidden="true"></span>Блокировка</button>
+    <button data-power="sleep"><span aria-hidden="true">☾</span>Сон</button>
+    <button data-power="restart"><span aria-hidden="true">⟳</span>Перезагрузка</button>
+    <button data-power="shutdown"><span aria-hidden="true">⏻</span>Выключение</button>
+  </div>
+  <details class="control-extras"><summary>Дополнительно</summary><div class="inline">
+  <button data-system="wifi">Wi-Fi</button><button data-system="vpn">VPN Windows</button><button data-system="sound">Звук</button><button data-system="theme">Цвета</button><button data-system="notifications">Уведомления</button><button id="dictation">Диктовка</button>
+</div><div id="native-status" class="muted"></div></details>
+</section>
+
+</div><div id="alarm" hidden><span id="alarm-mascot" class="orb" aria-hidden="true"></span><b id="alarm-title"></b><p id="alarm-body"></p><div class="alarm-actions"><button id="alarm-later" hidden>Через 10 мин</button><button id="alarm-dismiss">Готово</button></div></div><div id="message" role="status"></div><footer><span id="shortcut-hint">Alt + Space</span></footer></section></div><div id="drop-menu" hidden aria-label="Куда перенести файл">
+  <div data-drop="shelf" class="drop-target"><span aria-hidden="true">▱</span><strong>На полку</strong><small>Сохранить файл под рукой</small></div>
+  <div data-drop="launcher" class="drop-target"><span aria-hidden="true">⊞</span><strong>В лаунчер</strong><small>Создать ярлык запуска</small></div>
+  <div data-drop="chat" class="drop-target"><span aria-hidden="true">⌕</span><strong>В чат</strong><small>Скопировать путь и открыть ChatGPT</small></div>
+</div><dialog id="power-dialog" aria-labelledby="power-title"><form method="dialog"><h2 id="power-title"></h2><div class="eq-actions"><button value="cancel" autofocus>Отмена</button><button value="confirm" class="primary">Подтвердить</button></div></form></dialog><dialog id="eq-dialog" aria-labelledby="eq-title">
+  <form method="dialog"><header><h2 id="eq-title">Эквалайзер</h2><button aria-label="Закрыть">×</button></header></form>
+  <p>Для обработки звука Spotify подключи профиль Orbit в Equalizer APO на нужном устройстве.</p>
+  <div id="eq-bands"></div>
+  <div class="eq-actions"><button id="eq-reset">Сбросить</button><button id="eq-include">Скопировать строку Include</button><button id="eq-save" class="primary">Сохранить профиль</button></div>
+  <p id="eq-status" role="status"></p>
+</dialog></main><script src="core.js"></script><script src="renderer.js"></script></body></html>

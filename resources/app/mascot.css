@@ -1,0 +1,53 @@
+.pixel {
+  --pixel-color: var(--track-accent, #e98c67);
+  --look-x: var(--eye-x, 0px);
+  --look-y: var(--eye-y, 0px);
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: 26px;
+  height: 22px;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--pixel-color);
+  clip-path: polygon(23% 0,77% 0,77% 10%,89% 10%,89% 23%,96% 23%,96% 39%,100% 39%,100% 100%,84% 100%,84% 87%,70% 87%,70% 100%,57% 100%,57% 87%,43% 87%,43% 100%,30% 100%,30% 87%,16% 87%,16% 100%,0 100%,0 39%,4% 39%,4% 23%,11% 23%,11% 10%,23% 10%);
+}
+.pixel::before, .pixel::after {
+  content: '';
+  position: absolute;
+  top: 35%;
+  left: 20%;
+  width: 5px;
+  height: 6px;
+  color: #fff5e9;
+  background: currentColor;
+  box-shadow: 9px 0 currentColor;
+}
+.pixel::after {
+  width: 2px;
+  height: 3px;
+  top: 39%;
+  left: 24%;
+  color: #171621;
+  transform: translate(clamp(-1px,var(--look-x),1px), clamp(-1px,var(--look-y),1px));
+}
+.pixel[data-reaction="sleep"]::before { height: 2px; top: 47%; color: #624455; }
+.pixel[data-reaction="sleep"]::after { display: none; }
+#pill .pixel, .preview-pet.pixel { animation: pixel-idle 3s steps(3,end) infinite; }
+#pill .pixel[data-reaction="music"], .preview-pet.pixel[data-reaction="music"] { animation: pixel-dance .88s steps(3,end) infinite; }
+#pill .pixel[data-reaction="attention"], .preview-pet.pixel[data-reaction="attention"], #alarm-mascot.pixel { animation: pixel-alert .62s steps(4,end) infinite; }
+#pill .pixel[data-reaction="file"], .preview-pet.pixel[data-reaction="file"], .drop-target .pixel { animation: pixel-file .8s steps(4,end) infinite; }
+#pill .pixel[data-reaction="sleep"], .preview-pet.pixel[data-reaction="sleep"] { animation: pixel-sleep 2.5s steps(4,end) infinite; }
+@keyframes pixel-idle { 45% { translate: 0 -2px; } 62% { scale: 1 .95; } }
+@keyframes pixel-dance { 22% { translate: -3px -2px; } 42% { translate: 0 -5px; scale: 1 1.08; } 67% { translate: 3px -2px; } 85% { scale: 1.1 .9; } }
+@keyframes pixel-alert { 40% { translate: 0 -4px; scale: 1.06 1.1; } 75% { scale: 1.06 .92; } }
+@keyframes pixel-file { 34% { translate: 3px -2px; scale: 1.18 .94; } 68% { translate: -2px 0; } }
+@keyframes pixel-sleep { 50% { scale: 1 .86; opacity: .72; } }
+.preview-pet:not(.pixel) { animation: pixel-idle 3s ease-in-out infinite; }
+.preview-pet:not(.pixel)[data-reaction="music"] { animation: pixel-dance 1.1s ease-in-out infinite; }
+.preview-pet:not(.pixel)[data-reaction="attention"] { animation: pixel-alert .8s ease-in-out infinite; }
+.preview-pet:not(.pixel)[data-reaction="file"] { animation: pixel-file .8s ease-in-out infinite; }
+.preview-pet:not(.pixel)[data-reaction="sleep"] { animation: pixel-sleep 2.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  #pill .pixel[data-reaction], #alarm-mascot.pixel, .drop-target .pixel, .preview-pet[data-reaction] { animation: none; }
+}

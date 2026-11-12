@@ -1,0 +1,15 @@
+/*.exe
+/*.dll
+/*.pak
+/*.bin
+/*.dat
+/locales/
+/LICENSE
+/LICENSES.chromium.html
+/version
+/vk_swiftshader_icd.json
+/resources/elevate.exe
+**/node_modules/
+**/dist/
+**/.env*
+*.log

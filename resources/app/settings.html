@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'">
+  <title>Orbit — настройки</title>
+  <link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="mascot.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <header><img src="icon.png" alt=""><div><strong>Orbit</strong><small id="version"></small></div></header>
+    <nav aria-label="Разделы настроек">
+      <button type="button" data-section="general"><span aria-hidden="true">☷</span>Общее</button>
+      <button type="button" data-section="appearance"><span aria-hidden="true">◐</span>Внешний вид</button>
+      <button type="button" data-section="modules"><span aria-hidden="true">⊞</span>Модули</button><button type="button" data-section="keys"><span aria-hidden="true">⌨</span>Клавиши</button>
+      <button type="button" data-section="apps"><span aria-hidden="true">⊞</span>Лаунчер</button>
+      <button type="button" data-section="data"><span aria-hidden="true">▱</span>Данные</button>
+    </nav>
+    <button type="button" id="quit">⏻ Выйти из Orbit</button>
+  </aside>
+  <main>
+    <form id="config">
+      <div class="settings-scroll">
+        <section data-page="general">
+          <h1>Общее</h1>
+          <div data-preview-slot="general"><div id="island-preview"><div class="preview"><div class="preview-island"><span id="preview-pet" class="preview-pet" aria-hidden="true"><img src="pug.png" alt=""><span class="preview-symbol" hidden></span></span><span id="preview-clock"></span><div class="preview-expanded" aria-hidden="true"><i></i><i></i><i></i></div></div><span class="preview-caption">Свёрнутый островок</span></div><div class="preview-modes" aria-label="Предпросмотр реакции"><button type="button" data-reaction="idle" aria-pressed="true">Покой</button><button type="button" data-reaction="music" aria-pressed="false">Музыка</button><button type="button" data-reaction="attention" aria-pressed="false">Внимание</button><button type="button" data-reaction="file" aria-pressed="false">Файл</button><button type="button" data-reaction="sleep" aria-pressed="false">Сон</button><button type="button" id="preview-expand" aria-pressed="false">Раскрыть</button></div></div></div>
+          <div class="settings-group">
+            <label><span>Запускать вместе с Windows</span><input type="checkbox" id="autostart"></label>
+            <label><span>Ускорение видеокартой <small class="hint setting-detail">Изменение применяется после перезапуска Orbit.</small></span><input type="checkbox" id="gpuAcceleration"></label>
+            <label><span>Скрывать в полноэкранных приложениях</span><input type="checkbox" id="hideFullscreen"></label>
+            <label><span>Раскрывать при наведении</span><input type="checkbox" id="hover"></label>
+            <label><span>Сворачивать при уходе курсора</span><input type="checkbox" id="collapseOnLeave"></label>
+            <label><span>Прятать островок за верхнюю кромку</span><input type="checkbox" id="autohide"></label>
+            <label><span>Сквозной режим свёрнутого островка</span><input type="checkbox" id="clickThrough"></label>
+            <label><span>Задержка открытия, мс</span><input type="number" id="hoverDelay" min="0" max="1500" step="10"></label>
+            <label><span>Задержка закрытия, мс</span><input type="number" id="leaveDelay" min="0" max="1500" step="10"></label>
+            <label><span>Длительность коротких уведомлений</span><select id="eventDuration"><option value="1050">Короче</option><option value="1650">Обычно</option><option value="2800">Дольше</option></select></label>
+            <label><span>Предупреждать об осадках</span><input type="checkbox" id="rainAlerts"></label>
+            <label><span>Остров в выбранных приложениях</span><select id="ruleMode"><option value="hide">Прятать за кромку</option><option value="manual">Раскрывать вручную</option></select></label>
+            <label class="wide-setting"><span>Приложения, по одному имени процесса на строку</span><textarea id="restrictedApps" maxlength="2000" placeholder="game.exe"></textarea></label>
+          </div>
+        </section>
+        <section data-page="appearance" hidden>
+          <h1>Внешний вид</h1><div data-preview-slot="appearance"></div>
+          <div class="settings-group">
+            <label><span>Персонаж</span><select id="character"><option value="pug">Мопс</option><option value="sphere">Сфера</option><option value="eyes">Глазки</option><option value="spark">Искра</option><option value="pixel">Пиксельный призрак</option></select></label>
+            <label><span>Персонаж во время музыки</span><select id="musicCharacter"><option value="same">Тот же</option><option value="pug">Мопс</option><option value="sphere">Сфера</option><option value="eyes">Глазки</option><option value="spark">Искра</option><option value="pixel">Пиксельный призрак</option></select></label>
+            <label><span>Свёрнутый остров во время музыки</span><select id="musicMode"><option value="cover">Обложка</option><option value="title">Название и прогресс</option><option value="mini">Мини-плеер по клику</option><option value="lyrics">Текущая строка песни</option></select></label>
+            <label><span>Тема</span><select id="theme"><option value="dark">Тёмная</option><option value="light">Светлая</option><option value="system">Как в Windows</option></select></label>
+            <label><span>Цвет акцента</span><input type="color" id="accent"></label>
+            <label><span>Форма</span><select id="shape"><option value="capsule">Капсула</option><option value="edge">У верхней кромки</option></select></label>
+            <label><span>Монитор</span><select id="monitor"></select></label>
+            <label><span>Расположение</span><select id="position"><option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option></select></label>
+            <label><span>Отступ капсулы</span><input type="number" id="top" min="0" max="200" step="1"></label>
+            <label><span>Масштаб</span><input id="scale" type="range" min=".8" max="2" step=".1"></label>
+            <label><span>Непрозрачность</span><input id="opacity" type="range" min=".45" max="1" step=".05"></label>
+          </div>
+        </section>
+        <section data-page="modules" hidden>
+          <h1>Модули</h1>
+          <div class="modules-settings"><div class="settings-group"><h2>Главная</h2><div id="module-options"></div><h2>Вкладки</h2><div id="tab-options"></div></div>
+          <div id="module-preview" aria-label="Предпросмотр главной"></div></div>
+        </section>
+        <section data-page="keys" hidden>
+          <h1>Клавиши</h1>
+          <div class="settings-group"><label><span>Открыть поиск</span><input id="shortcut" placeholder="Alt+Space"></label></div>
+          <p class="hint">Формат сочетаний: Control+Alt+I. Клавиши отдельных приложений настраиваются в лаунчере.</p>
+        </section>
+        <section data-page="apps" hidden>
+          <header class="page-heading"><h1>Лаунчер</h1><button type="button" id="add">＋ Добавить</button></header>
+          <div id="entries"></div>
+        </section>
+        <section data-page="data" hidden>
+          <h1>Данные</h1>
+          <div class="settings-group">
+            <label><span>Сохранять историю буфера обмена</span><input type="checkbox" id="clipboard"></label>
+            <div><span>Папка данных Orbit</span><button type="button" id="data-folder">Открыть</button></div>
+            <div><span>Резервная копия</span><button type="button" id="backup">Экспорт JSON</button></div>
+          </div>
+        </section>
+      </div>
+      <footer><span id="message" role="status"></span><button class="primary" type="submit">Сохранить</button></footer>
+    </form>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>
