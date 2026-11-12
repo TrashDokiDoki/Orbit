@@ -239,7 +239,9 @@ handler('compact-mini', value => {
   bounds();
   return miniPlayer;
 });
-handler('get',()=>({settings,state,displays:screen.getAllDisplays().map((d,i)=>({index:i,label:d.label||'Монитор '+(i+1)})),version:app.getVersion(),platform:process.platform,gpuAccelerationActive:app.isHardwareAccelerationEnabled(),hotkeys}));
+const windowsBuild = process.platform === 'win32' ? Number(process.getSystemVersion().split('.')[2]) : 0;
+const systemLabel = !windowsBuild ? 'Windows' : windowsBuild >= 22000 ? 'Windows 11' : 'Windows 10';
+handler('get',()=>({settings,state,displays:screen.getAllDisplays().map((d,i)=>({index:i,label:d.label||'Монитор '+(i+1)})),version:app.getVersion(),platform:process.platform,systemLabel,gpuAccelerationActive:app.isHardwareAccelerationEnabled(),hotkeys}));
 handler('expand',v=>expand(v));handler('quit',()=>app.quit());
 handler('lyrics', async track => {
   const title = String(track?.title ?? '').trim().slice(0, 250);

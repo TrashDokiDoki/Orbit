@@ -1,6 +1,6 @@
 {
   "name": "orbit-island",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Customizable Windows desktop island: launcher, clipboard, shelf, notes, timers and capture tools",
   "main": "main.js",
   "author": "Orbit",
@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "build:win": "electron-packager . Orbit --platform=win32 --arch=x64 --out=dist --overwrite --ignore=^/dist --ignore=^/test- --ignore=^/node_modules/playwright",
+    "build:win:arm64": "electron-packager . Orbit --platform=win32 --arch=arm64 --out=dist --overwrite --ignore=^/dist --ignore=^/test- --ignore=^/node_modules/playwright",
     "check": "node --check main.js && node --check renderer.js && node --check preload.js && node --check native.js"
   },
   "devDependencies": {
