@@ -1,7 +1,9 @@
-const {app,BrowserWindow,ipcMain,screen,globalShortcut,Tray,Menu,nativeImage,shell,dialog,clipboard,desktopCapturer,Notification,session,nativeTheme}=require('electron');
+const {app,BrowserWindow,ipcMain,screen,globalShortcut,Tray,Menu,nativeImage,shell,dialog,clipboard,desktopCapturer,Notification,session,nativeTheme,powerMonitor}=require('electron');
 const fs=require('fs');const path=require('path');const crypto=require('crypto');const {spawn,execFile}=require('child_process');const WindowsBridge=require('./native');
 let win,tray,bridge,expanded=false,settings,state,editor,polling=false,recording=false;let timers=[];let lastClip='';let autoHidden=false;
 let collapseTimer;
+let edgeTimer;
+let alarmTimer;
 let capturing = false;
 let controlsBridge;
 let controlsVisible = false;
@@ -94,13 +96,14 @@ function openSettings(section = 'general', add = false) {
   window.on('closed', () => { settingsWindow = undefined; });
 }
 function showTab(tab){if(tab==='settings'){openSettings();return;}expand(true,true);send('tab',tab)}
-function apply(){if(settings.musicMode!=='mini')miniPlayer=false;refreshAppRule();if(!settings.autohide&&!(appRestricted&&settings.ruleMode==='hide'))autoHidden=false;win.setOpacity(settings.opacity);nativeTheme.themeSource=settings.theme;app.setLoginItemSettings({openAtLogin:settings.autostart});registerKeys();bounds()}
+function apply(){if(settings.musicMode!=='mini')miniPlayer=false;refreshAppRule();syncEdgePolling();if(!settings.autohide&&!(appRestricted&&settings.ruleMode==='hide'))autoHidden=false;win.setOpacity(settings.opacity);nativeTheme.themeSource=settings.theme;app.setLoginItemSettings({openAtLogin:settings.autostart});registerKeys();bounds()}
 function registerKeys(){globalShortcut.unregisterAll();hotkeys.length=0;const entries=[[settings.shortcut,()=>showTab('search')],['Control+Alt+I',()=>expand(!expanded,true)],['Control+Alt+V',()=>showTab('clipboard')],['Control+Alt+S',()=>capture('edit').catch(e=>send('error',e.message))],['Control+Alt+O',()=>capture('ocr').catch(e=>send('error',e.message))],['Control+Alt+C',()=>capture('color').catch(e=>send('error',e.message))],['Control+Alt+Q',()=>capture('qr').catch(e=>send('error',e.message))],['Control+Alt+R',()=>{showTab('tools');send('record-toggle')}],['Control+Alt+Shift+V',()=>{clipboard.writeText(clipboard.readText());expand(false);bridge.call('paste').catch(e=>send('error',e.message))}]];for(const item of settings.items)if(item.hotkey)entries.push([item.hotkey,()=>launch(item.target).catch(e=>send('error',e.message))]);for(const [key,cb]of entries){try{if(key&&!globalShortcut.register(key,cb))hotkeys.push(key)}catch{hotkeys.push(key)}}send('hotkeys',hotkeys)}
 function shellWindow(file,options={}){const w=new BrowserWindow({width:900,height:700,backgroundColor:'#121217',webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true},...options});w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',e=>e.preventDefault());w.loadFile(file);return w}
-function create(){if(process.platform==='win32')app.setAppUserModelId('Orbit.Desktop');settings={...defaults,...read('settings.json',defaults)};if(settings.character==='orb')settings.character='pug';state={...emptyState,...read('state.json',emptyState)};bridge=new WindowsBridge();win=shellWindow('index.html',{...compactSize,frame:false,transparent:true,backgroundColor:'#00000000',resizable:false,alwaysOnTop:true,skipTaskbar:true,hasShadow:false});win.setAlwaysOnTop(true,'floating');win.setContentProtection(true);apply();win.webContents.on('did-finish-load',()=>{lastSystemSnapshot='';sentCoverRevision=undefined;send('hotkeys',hotkeys);pollWindows()});
+function create(){if(process.platform==='win32')app.setAppUserModelId('Orbit.Desktop');settings={...defaults,...read('settings.json',defaults)};if(settings.character==='orb')settings.character='pug';state={...emptyState,...read('state.json',emptyState)};bridge=new WindowsBridge();win=shellWindow('index.html',{...compactSize,frame:false,transparent:true,backgroundColor:'#00000000',resizable:false,alwaysOnTop:true,skipTaskbar:true,hasShadow:false});win.setAlwaysOnTop(true,'floating');win.setContentProtection(true);apply();win.webContents.on('did-finish-load',()=>{lastSystemSnapshot='';sentCoverRevision=undefined;send('hotkeys',hotkeys);pollWindows();scheduleAlarm()});
 tray=new Tray(nativeImage.createFromPath(path.join(__dirname,'icon.png')));tray.setToolTip('Orbit • '+settings.shortcut);tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть Orbit',click:()=>showTab('home')},{label:'Настройки',click:()=>showTab('settings')},{label:'Свернуть',click:()=>expand(false)},{type:'separator'},{label:'Выход',click:()=>app.quit()}]));tray.on('click',()=>expand(!expanded,true));screen.on('display-metrics-changed',bounds);screen.on('display-removed',bounds);
 session.defaultSession.setPermissionRequestHandler((wc,permission,cb)=>cb(wc===win.webContents&&['media','display-capture'].includes(permission)));session.defaultSession.setDisplayMediaRequestHandler(async(request,cb)=>{try{if(request.securityOrigin!=='file://'&&request.securityOrigin!=='file:'){cb({});return}const sources=await desktopCapturer.getSources({types:['screen']});const display=screen.getAllDisplays()[settings.monitor]||screen.getPrimaryDisplay();const video=sources.find(s=>s.display_id===String(display.id))||sources[0];cb({video,audio:process.platform==='win32'?'loopback':undefined})}catch{cb({})}});
-timers.push(setInterval(tick,1000),setInterval(edge,100),setInterval(pollLayout,250));pollLayout();pollWindows();}
+powerMonitor.on('resume', scheduleAlarm);
+timers.push(setInterval(pollLayout,250));pollLayout();pollWindows();}
 let layoutPending = false;
 let lastLayout;
 let lastClipboardSequence;
@@ -136,6 +139,14 @@ function revealIndicator() {
   if (autoHidden && win.isVisible()) {
     autoHidden = false;
     bounds();
+  }
+}
+function syncEdgePolling() {
+  const enabled = settings.autohide || settings.ruleMode === 'hide' && Boolean(settings.restrictedApps.trim());
+  if (enabled && edgeTimer === undefined) edgeTimer = setInterval(edge, 100);
+  if (!enabled && edgeTimer !== undefined) {
+    clearInterval(edgeTimer);
+    edgeTimer = undefined;
   }
 }
 function edge() {
@@ -223,7 +234,41 @@ async function pollWindows() {
 }
 function pollClipboard(){if(!settings.clipboard)return;try{const formats=clipboard.availableFormats();if(formats.some(f=>/ExcludeClipboardContentFromMonitorProcessing|CanIncludeInClipboardHistory|Password/i.test(f)))return;const img=clipboard.readImage();let item;if(!img.isEmpty()){const b=img.toPNG();if(b.length>8*1024*1024)return;const hash=crypto.createHash('sha256').update(b).digest('hex');if(hash===lastClip)return;lastClip=hash;item={type:'image',data:img.resize({width:Math.min(1600,img.getSize().width)}).toDataURL()}}else{const text=clipboard.readText();if(!text||text.length>100000)return;const hash=crypto.createHash('sha256').update(text).digest('hex');if(hash===lastClip)return;lastClip=hash;item={type:'text',text}}const exists=state.clips.find(c=>item.type===c.type&&(item.text?item.text===c.text:item.data===c.data));if(exists)return;state.clips.unshift({...item,id:crypto.randomUUID(),at:Date.now(),pinned:false});const pins=state.clips.filter(c=>c.pinned),others=state.clips.filter(c=>!c.pinned).slice(0,60);state.clips=[...pins,...others];saveState();send('clips',state.clips)}catch{}}
 function alert(title,body,details={}){if(Notification.isSupported())new Notification({title,body,silent:false}).show();expand(true);send('alarm',{title,body,...details});}
-function tick(){let changed=false;if(state.timer&&!state.timer.paused&&Date.now()>=state.timer.end){const total=state.timer.total;state.timer=null;alert('Таймер завершён','Время вышло. Можно сделать перерыв.',{kind:'timer',total});changed=true}for(const r of state.reminders){if(!r.done&&r.at<=Date.now()){alert('Напоминание',r.text,{kind:'reminder'});if(r.repeat==='daily'){const date=new Date(r.at);do{date.setDate(date.getDate()+1)}while(date.getTime()<=Date.now());r.at=date.getTime()}else r.done=true;changed=true}}if(changed){saveState();send('state',state)}}
+function scheduleAlarm() {
+  clearTimeout(alarmTimer);
+  const timer = state.timer;
+  let deadline = timer && !timer.paused && Number.isFinite(timer.end) ? timer.end : Infinity;
+  for (const reminder of state.reminders) {
+    if (!reminder.done && Number.isFinite(reminder.at)) deadline = Math.min(deadline, reminder.at);
+  }
+  // Bound the delay so edits to the system clock are picked up while an alarm is pending.
+  if (Number.isFinite(deadline)) alarmTimer = setTimeout(tick, Math.min(30000, Math.max(0, deadline - Date.now())));
+}
+function tick() {
+  const now = Date.now();
+  let changed = false;
+  if (state.timer && !state.timer.paused && state.timer.end <= now) {
+    const total = state.timer.total;
+    state.timer = null;
+    alert('Таймер завершён','Время вышло. Можно сделать перерыв.',{kind:'timer',total});
+    changed = true;
+  }
+  for (const reminder of state.reminders) {
+    if (reminder.done || !(reminder.at <= now)) continue;
+    alert('Напоминание',reminder.text,{kind:'reminder'});
+    if (reminder.repeat === 'daily') {
+      const date = new Date(reminder.at);
+      do { date.setDate(date.getDate() + 1); } while (date.getTime() <= now);
+      reminder.at = date.getTime();
+    } else reminder.done = true;
+    changed = true;
+  }
+  if (changed) {
+    saveState();
+    send('state',state);
+  }
+  scheduleAlarm();
+}
 async function launch(t){if(/^https?:\/\//i.test(t)||/^(spotify|steam|ms-settings):/i.test(t)){await shell.openExternal(t);return}if(/^[a-z]:\\/i.test(t)&&fs.existsSync(t)){const error=await shell.openPath(t);if(error)throw Error(error);return}throw Error('Укажи ссылку https://, spotify:, steam: или путь к существующему файлу')}
 async function capture(mode){if(editor&&!editor.isDestroyed()){editor.focus();return}if(capturing)return;capturing=true;expand(false);win.hide();await new Promise(r=>setTimeout(r,220));try{const display=screen.getAllDisplays()[settings.monitor]||screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw Error('Windows не разрешила захват экрана');if(mode==='full'){clipboard.writeImage(source.thumbnail);win.showInactive();return}const image=source.thumbnail.toDataURL();editor=shellWindow('capture.html',{x:display.bounds.x,y:display.bounds.y,width:display.bounds.width,height:display.bounds.height,frame:false,alwaysOnTop:true});editor.setContentProtection(true);editor.webContents.once('did-finish-load',()=>editor.webContents.send('capture',{image,mode}));editor.on('closed',()=>{editor=null;win.showInactive()})}catch(e){win.showInactive();throw e}finally{capturing=false}}
 function handler(name,fn){ipcMain.handle(name,async(e,...args)=>{const trusted=e.sender===win?.webContents||e.sender===editor?.webContents||e.sender===settingsWindow?.webContents;if(!trusted)throw Error('Unknown window');try{return await fn(...args)}catch(err){return {error:err.message}}})}
@@ -558,8 +603,8 @@ handler('shelf-add',async paths=>{if(!paths){const r=await dialog.showOpenDialog
 handler('shelf-action',async(id,action)=>{const file=state.shelf.find(f=>f.id===id);if(!file)throw Error('Файл не найден');if(action==='remove'){state.shelf=state.shelf.filter(f=>f.id!==id);saveState()}else if(action==='reveal')shell.showItemInFolder(file.path);else if(action==='open'){const error=await shell.openPath(file.path);if(error)throw Error(error)}return state.shelf});
 ipcMain.on('drag-file',(e,id)=>{if(e.sender!==win.webContents)return;const f=state.shelf.find(f=>f.id===id);if(f&&fs.existsSync(f.path))e.sender.startDrag({file:f.path,icon:nativeImage.createFromPath(path.join(__dirname,'icon.png'))})});
 handler('notes-save',notes=>{if(!Array.isArray(notes)||notes.length>100)throw Error('Максимум 100 заметок');state.notes=notes.map(n=>({id:String(n.id),name:String(n.name).slice(0,100),folder:String(n.folder||'Личное').slice(0,40),text:String(n.text).slice(0,200000)}));saveState();return true});
-handler('timer',command=>{if(command.action==='stop')state.timer=null;else if(command.action==='reset'&&state.timer){state.timer.end=Date.now()+state.timer.total;state.timer.paused=false;delete state.timer.remaining}else if(command.action==='pause'&&state.timer){if(state.timer.paused){state.timer.end=Date.now()+state.timer.remaining;state.timer.paused=false}else{state.timer.remaining=Math.max(0,state.timer.end-Date.now());state.timer.paused=true}}else if(command.action==='start'){const minutes=Number(command.minutes);if(!Number.isFinite(minutes)||minutes<=0||minutes>1440)throw Error('Таймер: от 0 до 1440 минут');state.timer={end:Date.now()+minutes*60000,total:minutes*60000,paused:false}}saveState();send('state',state);return state.timer});
-handler('reminder',(action,r)=>{if(action==='add'){if(!r.text||!Number.isFinite(r.at)||r.at<=Date.now())throw Error('Укажи текст и время в будущем');state.reminders.push({id:crypto.randomUUID(),text:String(r.text).slice(0,500),at:r.at,repeat:r.repeat==='daily'?'daily':'once',done:false})}else if(action==='remove')state.reminders=state.reminders.filter(x=>x.id!==r.id);saveState();return state.reminders});
+handler('timer',command=>{if(command.action==='stop')state.timer=null;else if(command.action==='reset'&&state.timer){state.timer.end=Date.now()+state.timer.total;state.timer.paused=false;delete state.timer.remaining}else if(command.action==='pause'&&state.timer){if(state.timer.paused){state.timer.end=Date.now()+state.timer.remaining;state.timer.paused=false}else{state.timer.remaining=Math.max(0,state.timer.end-Date.now());state.timer.paused=true}}else if(command.action==='start'){const minutes=Number(command.minutes);if(!Number.isFinite(minutes)||minutes<=0||minutes>1440)throw Error('Таймер: от 0 до 1440 минут');state.timer={end:Date.now()+minutes*60000,total:minutes*60000,paused:false}}saveState();scheduleAlarm();send('state',state);return state.timer});
+handler('reminder',(action,r)=>{if(action==='add'){if(!r.text||!Number.isFinite(r.at)||r.at<=Date.now())throw Error('Укажи текст и время в будущем');state.reminders.push({id:crypto.randomUUID(),text:String(r.text).slice(0,500),at:r.at,repeat:r.repeat==='daily'?'daily':'once',done:false})}else if(action==='remove')state.reminders=state.reminders.filter(x=>x.id!==r.id);saveState();scheduleAlarm();return state.reminders});
 handler('capture',mode=>capture(mode));
 handler('capture-result',async result=>{if(result.action==='close'){editor?.close();return}const img=nativeImage.createFromDataURL(result.data||'');if(img.isEmpty())throw Error('Пустое изображение');if(result.action==='copy'){clipboard.writeImage(img);editor?.close();return {ok:true}}if(result.action==='save'){const r=await dialog.showSaveDialog(editor,{defaultPath:path.join(app.getPath('pictures'),'Orbit-'+Date.now()+'.png'),filters:[{name:'PNG',extensions:['png']}]});if(!r.canceled){fs.writeFileSync(r.filePath,img.toPNG());editor?.close()}return {ok:!r.canceled}}if(result.action==='ocr'){const p=dataPath('ocr-temp.png');fs.writeFileSync(p,img.toPNG());try{const text=await bridge.call('ocr',{path:p});clipboard.writeText(text||'');return {text}}finally{fs.rmSync(p,{force:true})}}});
 handler('color',hex=>{if(!/^#[0-9a-f]{6}$/i.test(hex))throw Error('Неверный цвет');clipboard.writeText(hex);state.colors=[hex,...state.colors.filter(c=>c!==hex)].slice(0,20);saveState();return true});
@@ -569,4 +614,4 @@ handler('record-save',async(payload,mime)=>{recording=false;const ext=mime.inclu
 handler('weather',async(city)=>{const get=async url=>{const res=await require('electron').net.fetch(url,{signal:AbortSignal.timeout(10000)});if(!res.ok)throw Error('Погода недоступна: HTTP '+res.status);return res.json()};const geo=await get('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(String(city).slice(0,80))+'&count=1&language=ru&format=json');const loc=geo.results?.[0];if(!loc)throw Error('Город не найден');const forecast=await get(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&wind_speed_unit=ms&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,is_day&hourly=temperature_2m,weather_code,is_day,precipitation_probability,precipitation,dew_point_2m,surface_pressure,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum,uv_index_max&timezone=auto&forecast_days=7`);return {location:loc,forecast}});
 handler('data-export',async()=>{const r=await dialog.showSaveDialog(settingsWindow||win,{defaultPath:'Orbit-backup.json',filters:[{name:'JSON',extensions:['json']}]});if(!r.canceled)fs.writeFileSync(r.filePath,JSON.stringify({settings,state},null,2));return !r.canceled});
 handler('data-folder',()=>shell.openPath(app.getPath('userData')));
-if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(() => {create();startupUpdateTimer=setTimeout(notifyAboutUpdate,10000);timers.push(setInterval(notifyAboutUpdate,6*60*60*1000));});app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(startupUpdateTimer);clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}
+if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(() => {create();startupUpdateTimer=setTimeout(notifyAboutUpdate,10000);timers.push(setInterval(notifyAboutUpdate,6*60*60*1000));});app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(startupUpdateTimer);clearTimeout(alarmTimer);clearInterval(edgeTimer);clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}
