@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const api = window.orbit;
 const fields = ['accent','theme','character','shape','position','top','scale','opacity','shortcut','monitor','musicCharacter','musicMode','hoverDelay','leaveDelay','eventDuration','restrictedApps','ruleMode'];
-const toggles = ['autostart','hover','collapseOnLeave','autohide','hideFullscreen','clipboard','clickThrough','rainAlerts','gpuAcceleration'];
+const toggles = ['autostart','hover','collapseOnLeave','autohide','hideFullscreen','showInCapture','clipboard','clickThrough','rainAlerts','gpuAcceleration'];
 let settings;
 let previewReaction = 'idle';
 let pendingSection = { section: 'general' };
