@@ -12,6 +12,9 @@ let controlsRelease;
 let mediaPollTimer;
 let settingsWindow;
 let musicPlaying = false;
+let steamDownload = '';
+let steamRoot;
+let steamLookupAfter = 0;
 let miniPlayer = false;
 let mediaWidthTimer;
 let preferredMedia = '';
@@ -26,6 +29,68 @@ const dataPath=name=>path.join(app.getPath('userData'),name);function read(name,
 if (read('settings.json',defaults)?.gpuAcceleration === false) app.disableHardwareAcceleration();
 function write(name,data){const p=dataPath(name);fs.writeFileSync(p+'.tmp',JSON.stringify(data,null,2));fs.renameSync(p+'.tmp',p)}function saveState(){write('state.json',state)}
 function send(channel,data){if(win&&!win.isDestroyed())win.webContents.send(channel,data)}
+async function readSteamDownload() {
+  if (!steamRoot) {
+    if (Date.now() < steamLookupAfter) return '';
+    steamLookupAfter = Date.now() + 60000;
+    const lookup = (hive, key) => new Promise(resolve => {
+      execFile('reg.exe', ['query', hive, '/v', key], {windowsHide: true}, (error, output) => {
+        resolve(error ? '' : output.match(/\bREG_SZ\s+([^\r\n]+)/)?.[1].trim() || '');
+      });
+    });
+    steamRoot = await lookup('HKCU\\Software\\Valve\\Steam', 'SteamPath') ||
+      await lookup('HKLM\\Software\\WOW6432Node\\Valve\\Steam', 'InstallPath');
+    if (!steamRoot) return '';
+  }
+  const log = await fs.promises.open(path.join(steamRoot, 'logs', 'content_log.txt'), 'r');
+  try {
+    const {size} = await log.stat();
+    const bytes = Buffer.alloc(Math.min(64 * 1024, size));
+    const {bytesRead} = await log.read(bytes, 0, bytes.length, size - bytes.length);
+    const active = new Map();
+    for (const line of bytes.subarray(0, bytesRead).toString('utf8').split('\n')) {
+      const entry = line.match(/^\[([^\]]+)\] AppID (\d+) (.*)$/);
+      if (!entry) continue;
+      const [, time, id, event] = entry;
+      const progress = event.match(/^update (?:started|progress)\s*:\s*download (\d+)\/(\d+)/i);
+      if (progress) {
+        active.delete(id);
+        active.set(id, {time: Date.parse(time.replace(' ', 'T')), done: +progress[1], total: +progress[2]});
+      } else if (/^(?:finished update|update canceled|update finished|App update changed\s*:\s*None)/i.test(event)) {
+        active.delete(id);
+      }
+    }
+    const download = [...active].reverse().find(([, item]) => item.total > 0 && item.done < item.total);
+    if (!download) return '';
+    const [id, progress] = download;
+    const isRecent = time => Date.now() - time >= 0 && Date.now() - time < 120000;
+    let recentProgress = isRecent(progress.time);
+    const index = await fs.promises.readFile(path.join(steamRoot, 'steamapps', 'libraryfolders.vdf'), 'utf8').catch(() => '');
+    const libraries = [steamRoot, ...Array.from(index.matchAll(/"path"\s+"([^"]+)"/g), match => match[1].replace(/\\\\/g, '\\'))];
+    for (const library of new Set(libraries)) {
+      const manifestPath = path.join(library, 'steamapps', 'appmanifest_' + id + '.acf');
+      const manifest = await fs.promises.readFile(manifestPath, 'utf8').catch(() => '');
+      const total = Number(manifest.match(/"BytesToDownload"\s+"(\d+)"/)?.[1]);
+      const done = Number(manifest.match(/"BytesDownloaded"\s+"(\d+)"/)?.[1]);
+      if (total !== progress.total || !Number.isFinite(done) || done > total) continue;
+      progress.done = Math.max(progress.done, done);
+      if (!recentProgress && done > 0) {
+        const stats = await fs.promises.stat(manifestPath).catch(() => null);
+        recentProgress = isRecent(stats?.mtimeMs);
+      }
+    }
+    return recentProgress && progress.done < progress.total ? '↓ Steam ' + Math.floor(progress.done * 100 / progress.total) + '%' : '';
+  } finally {
+    await log.close();
+  }
+}
+async function refreshSteamDownload() {
+  const next = await readSteamDownload().catch(() => '');
+  if (next === steamDownload) return;
+  steamDownload = next;
+  bounds();
+  send('steam-download', steamDownload);
+}
 function selectedDisplay() {
   return screen.getAllDisplays()[settings.monitor] || screen.getPrimaryDisplay();
 }
@@ -42,7 +107,7 @@ function bounds() {
   const hasMusic = musicPlaying || mediaWidthTimer !== undefined;
   const musicWidth = ['title','lyrics','mini'].includes(settings.musicMode) ? 366 : 232;
   const size = expanded || collapseTimer !== undefined ? panelSize : miniPlayer ? { width: musicWidth, height: 94 }
-    : hasMusic ? { ...compactSize, width: musicWidth } : compactSize;
+    : hasMusic || steamDownload ? { ...compactSize, width: Math.max(hasMusic ? musicWidth : 0, steamDownload ? 250 : 0) } : compactSize;
   const width = Math.round(size.width * scale);
   const height = Math.round(size.height * scale);
   let x = area.x + Math.round((area.width - width) / 2);
@@ -421,7 +486,7 @@ handler('network-tools-set', async (key, enable) => {
     networkChange = false;
   }
 });
-handler('get',()=>({settings,state,displays:screen.getAllDisplays().map((d,i)=>({index:i,label:d.label||'Монитор '+(i+1)})),version:app.getVersion(),platform:process.platform,systemLabel,gpuAccelerationActive:app.isHardwareAccelerationEnabled(),hotkeys}));
+handler('get',()=>({settings,state,steamDownload,displays:screen.getAllDisplays().map((d,i)=>({index:i,label:d.label||'Монитор '+(i+1)})),version:app.getVersion(),platform:process.platform,systemLabel,gpuAccelerationActive:app.isHardwareAccelerationEnabled(),hotkeys}));
 handler('expand',v=>expand(v));handler('quit',()=>app.quit());
 handler('lyrics', async track => {
   const title = String(track?.title ?? '').trim().slice(0, 250);
@@ -611,7 +676,7 @@ handler('color',hex=>{if(!/^#[0-9a-f]{6}$/i.test(hex))throw Error('Неверн�
 handler('qr',async data=>{const jsQR=require('jsqr');const image=nativeImage.createFromDataURL(data);const {width,height}=image.getSize();const bitmap=image.toBitmap();const rgba=new Uint8ClampedArray(bitmap.length);for(let i=0;i<bitmap.length;i+=4){rgba[i]=bitmap[i+2];rgba[i+1]=bitmap[i+1];rgba[i+2]=bitmap[i];rgba[i+3]=bitmap[i+3]}const code=jsQR(rgba,width,height);if(!code)throw Error('QR-код не найден. Выдели область точнее.');clipboard.writeText(code.data);return {text:code.data}});
 handler('record-state',v=>{recording=!!v;send('recording',recording);return true});
 handler('record-save',async(payload,mime)=>{recording=false;const ext=mime.includes('mp4')?'mp4':'webm';const r=await dialog.showSaveDialog(win,{defaultPath:path.join(app.getPath('videos'),'Orbit-'+Date.now()+'.'+ext),filters:[{name:ext.toUpperCase(),extensions:[ext]}]});if(!r.canceled){fs.writeFileSync(r.filePath,Buffer.from(payload));shell.showItemInFolder(r.filePath)}send('recording',false);return {saved:!r.canceled}});
-handler('weather',async(city)=>{const get=async url=>{const res=await require('electron').net.fetch(url,{signal:AbortSignal.timeout(10000)});if(!res.ok)throw Error('Погода недоступна: HTTP '+res.status);return res.json()};const geo=await get('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(String(city).slice(0,80))+'&count=1&language=ru&format=json');const loc=geo.results?.[0];if(!loc)throw Error('Город не найден');const forecast=await get(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&wind_speed_unit=ms&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,is_day&hourly=temperature_2m,weather_code,is_day,precipitation_probability,precipitation,dew_point_2m,surface_pressure,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum,uv_index_max&timezone=auto&forecast_days=7`);return {location:loc,forecast}});
+handler('weather',async(city)=>{const get=async url=>{const res=await require('electron').net.fetch(url,{signal:AbortSignal.timeout(10000)});if(!res.ok)throw Error('Погода недоступна: HTTP '+res.status);return res.json()};const query=String(city).trim().slice(0,80);const name=query.split(',')[0].trim().replace(/\s+/g,' ').toLowerCase();const loc=['красная горбатка','красная горбака'].includes(name)?{name:'Красная Горбатка',admin1:'Владимирская область',country:'Россия',latitude:55.87701,longitude:41.75508}:(await get('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(query)+'&count=1&language=ru&format=json')).results?.[0];if(!loc)throw Error('Город не найден');const forecast=await get(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&wind_speed_unit=ms&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,is_day&hourly=temperature_2m,weather_code,is_day,precipitation_probability,precipitation,dew_point_2m,surface_pressure,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum,uv_index_max&timezone=auto&forecast_days=7`);return {location:loc,forecast}});
 handler('data-export',async()=>{const r=await dialog.showSaveDialog(settingsWindow||win,{defaultPath:'Orbit-backup.json',filters:[{name:'JSON',extensions:['json']}]});if(!r.canceled)fs.writeFileSync(r.filePath,JSON.stringify({settings,state},null,2));return !r.canceled});
 handler('data-folder',()=>shell.openPath(app.getPath('userData')));
-if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(() => {create();startupUpdateTimer=setTimeout(notifyAboutUpdate,10000);timers.push(setInterval(notifyAboutUpdate,6*60*60*1000));});app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(startupUpdateTimer);clearTimeout(alarmTimer);clearInterval(edgeTimer);clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}
+if(!app.requestSingleInstanceLock())app.quit();else{app.on('second-instance',()=>win&&showTab('home'));app.whenReady().then(() => {create();void refreshSteamDownload();timers.push(setInterval(refreshSteamDownload,5000));startupUpdateTimer=setTimeout(notifyAboutUpdate,10000);timers.push(setInterval(notifyAboutUpdate,6*60*60*1000));});app.on('window-all-closed',()=>{});app.on('will-quit',()=>{globalShortcut.unregisterAll();clearTimeout(startupUpdateTimer);clearTimeout(alarmTimer);clearInterval(edgeTimer);clearTimeout(collapseTimer);clearTimeout(mediaWidthTimer);clearTimeout(mediaPollTimer);clearTimeout(controlsRelease);for(const t of timers)clearInterval(t);bridge?.close();controlsBridge?.close()})}
